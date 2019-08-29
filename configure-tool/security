@@ -1,0 +1,4 @@
+# Configuration file for the euleros-security service.
+
+EULEROS_SECURITY=0
+

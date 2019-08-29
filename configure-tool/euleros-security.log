@@ -1,0 +1,4 @@
+2019-08-30 01:24:44 [[32;1m INFO [0m] [[33;1mconfigure-tool.sh[0m:[35;1m332[0m] working directory is [/root/test/patch-and-template-make/configure-tool/]
+2019-08-30 01:24:44 [[32;1m INFO [0m] [[33;1mconfigure-tool.sh[0m:[35;1m333[0m] logging file is [/root/test/patch-and-template-make/configure-tool/euleros-security.log]
+2019-08-30 01:24:45 [[32;1m INFO [0m] [[33;1mconfigure-tool.sh[0m:[35;1m334[0m] parsing params[-c security.conf -d rootfs/] [32;1msuccess[0m
+2019-08-30 01:24:45 [[32;1m INFO [0m] [[33;1mconfigure-tool.sh[0m:[35;1m246[0m] ========exit, status is [0]========

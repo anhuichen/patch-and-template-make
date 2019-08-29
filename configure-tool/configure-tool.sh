@@ -135,24 +135,36 @@ function fn_log()
     local level=$2
     shift 2
 
-    if [ $SILENT -eq 0 ] || [ "$level" = "error" ]; then
-        output=$@
-        opt=`echo $output | grep -e "success$"`
-        if [ $? -eq 0 ];then
-            output=`echo $opt | sed -r 's/success$/\\\033\\[32;1msuccess\\\033\\[0m/g'`
-        fi
-        opt=`echo $output | grep -e "fail$"`
-        if [ $? -eq 0 ];then
-            output=`echo $opt | sed -r 's/fail$/\\\033\\[31;1mfail\\\033\\[0m/g'`
-        fi
-        echo -e "[$NAME:$lno] [$level] $output"
+	# highlight in different color for level
+	case $level in
+	FAILED) level=`echo $level | sed -r 's/FAILED/\\\033\\[31;1mFAILED\\\033\\[0m/g'`;;
+	INFO) level=`echo $level | sed -r 's/INFO/\\\033\\[32;1m\ INFO\ \\\033\\[0m/g'`;;
+	WARN)dd level=`echo $level | sed -r 's/WARN/\\\033\\[32;1m\ WARN\ \\\033\\[0m/g'`;;
+	esac
+
+	lname=`echo $NAME | sed -r 's/(.*)/\\\033\\[33;1m\\1\\\033\\[0m/g'`
+	lno=`echo $lno | sed -r 's/(.*)/\\\033\\[35;1m\\1\\\033\\[0m/g'`
+
+	# highlight in different color for level
+    output=$@
+    opt=`echo $output | grep -e "success$"`
+    if [ $? -eq 0 ];then
+        output=`echo $opt | sed -r 's/success$/\\\033\\[32;1msuccess\\\033\\[0m/g'`
+    fi
+    opt=`echo $output | grep -e "fail$"`
+    if [ $? -eq 0 ];then
+        output=`echo $opt | sed -r 's/fail$/\\\033\\[31;1mfail\\\033\\[0m/g'`
     fi
 
-    echo "`date +%Y-%m-%d\ %H:%M:%S` [$NAME:$lno] [$level] $@" >> $LOGFILE
+    if [ $SILENT -eq 0 ] || [ "$level" = "ERROR" ]; then
+    	echo -e "`date '+%F %H:%M:%S'` [$level] [$lname:$lno] $output"
+    fi
+    echo -e "`date '+%F %H:%M:%S'` [$level] [$lname:$lno] $output" >> $LOGFILE
+
 }
-alias fn_error='fn_log $LINENO error'
-alias fn_warn='fn_log $LINENO warn'
-alias fn_info='fn_log $LINENO info'
+alias fn_failed='fn_log $LINENO FAILED'
+alias fn_warn='fn_log $LINENO WARN'
+alias fn_info='fn_log $LINENO INFO'
 
 #=============================================================================
 # Function Name: fn_exit
@@ -206,7 +218,7 @@ function fn_exit()
             if [ $? -eq 0 ]; then
                 fn_info "initrd.cpio.gz updated"
             else
-                fn_error "fail to replace initrd.cpio.gz in $AR_F by $GZ_F"
+                fn_failed "fail to replace initrd.cpio.gz in $AR_F by $GZ_F"
                 fn_exit 1
             fi
 
@@ -277,15 +289,14 @@ function fn_parse_params()
         exit 0
     fi
 
-    while getopts c:u:d:l:x:s arg $args
+    while getopts c:d:l:x:s arg $args
     do
         case "$arg" in
         c) SCONF=`fn_get_fullpath $OPTARG`;;
-        u) USR_SCONF=`fn_get_fullpath $OPTARG`;;
         d) DST=`fn_get_fullpath $OPTARG`;;
         l) LOGFILE=`fn_get_fullpath $OPTARG`;;
-        s) SILENT=1;;
         x) EXECID=$OPTARG;;
+		s) SILENT=1;;
         *) echo "unknown args:$args"
            fn_usage
            exit 1;;
@@ -303,11 +314,6 @@ function fn_parse_params()
         exit 1
     fi
 
-    if [ ! -e "$USR_SCONF" ]; then
-        echo "config_file [$USR_SCONF] not existed"
-        exit 1
-    fi
-
     # first get LOGFILE resolved
     if [ "$LOGFILE" = "" ]; then
         LOGFILE=$WORKD'euleros-security.log'
@@ -317,29 +323,14 @@ function fn_parse_params()
     chown root:root $LOGFILE
     chmod 600 $LOGFILE
 
-    # Confirmation
-    if [ $SILENT -eq 0 ]; then
-        while true
-        do
-            echo -n "Are you sure to do security hardening on $DST[Y/N]:"
-            read rep
-            if [ "$rep" = "n" ] || [ "$rep" = "N" ]; then
-                fn_info "exit $NAME by user..."
-                fn_exit 0
-            elif [ "$rep" = "y" ] || [ "$rep" = "Y" ]; then
-                break
-            fi
-        done
-        unset rep
-    fi
-
     readonly DST
     readonly SCONF
     readonly LOGFILE
     readonly SILENT
     readonly EXECID
 
-    fn_info "working dir is [$WORKD], logging file is [$LOGFILE]"
+    fn_info "working directory is [$WORKD]"
+	fn_info "logging file is [$LOGFILE]"
     fn_info "parsing params[$args] done"
 }
 
@@ -372,7 +363,7 @@ function fn_pre_hardening()
         pushd $WORKD
         ar -x $AR_F $GZ_F
         if [ $? -ne 0 ] || [ ! -f "$GZ_F" ]; then
-            fn_error "fail to extract initrd.cpio.gz from [$AR_F]"
+            fn_failed "fail to extract initrd.cpio.gz from [$AR_F]"
             fn_exit 2
         fi
         popd
@@ -381,7 +372,7 @@ function fn_pre_hardening()
         if [ $? -eq 0 ]; then
             GZ_F=$DST
         else
-            fn_error "destination format not ar or cpio.gz, quit..."
+            fn_failed "destination format not ar or cpio.gz, quit..."
             fn_exit 2
         fi
     fi
@@ -391,7 +382,7 @@ function fn_pre_hardening()
     ROOTFS=$WORKD"initrd.`date +%Y%m%d%H%M%S`"
     mkdir -p $ROOTFS
     if [ ! -d "$ROOTFS" ]; then
-        fn_error "fail to mkdir [$ROOTFS]"
+        fn_failed "fail to mkdir [$ROOTFS]"
         fn_exit 2
     fi
 
@@ -399,7 +390,7 @@ function fn_pre_hardening()
     pushd $ROOTFS
     zcat $GZ_F > "$ROOTFS/$TMPTARGET"
     if [ $? -ne 0 ]; then
-        fn_error "fail to extract [$GZ_F] to $ROOTFS/$TMPTARGET"
+        fn_failed "fail to extract [$GZ_F] to $ROOTFS/$TMPTARGET"
         fn_exit 2
     fi
 
@@ -407,7 +398,7 @@ function fn_pre_hardening()
     if [ $? -eq 0 ]; then
         cpio --quiet -id <"$ROOTFS/$TMPTARGET" >/dev/null
         if [ $? -ne 0 ]; then
-            fn_error "fail to extract [$GZ_F] to $ROOTFS"
+            fn_failed "fail to extract [$GZ_F] to $ROOTFS"
             fn_exit 2
         fi
         if [ "$DST_TYPE" != "ar" ];then
@@ -416,7 +407,7 @@ function fn_pre_hardening()
     else
         tar -xvf "$ROOTFS/$TMPTARGET" >/dev/null
         if [ $? -ne 0 ]; then
-            fn_error "fail to extract [$GZ_F] to $ROOTFS"
+            fn_failed "fail to extract [$GZ_F] to $ROOTFS"
             fn_exit 2
         fi
         DST_TYPE="tar.gz"
@@ -441,7 +432,7 @@ function fn_check_rootfs()
             if [ $i == "boot" ];then
                 continue
             fi
-            fn_error "[$ROOTFS] is not a standard EulerOS rootfs"
+            fn_failed "[$ROOTFS] is not a standard EulerOS rootfs"
             fn_exit 2
         fi
     done
@@ -546,7 +537,7 @@ function fn_handle_key()
         fi
         ;;
     *)
-        fn_error "bad operator [$op]"
+        fn_failed "bad operator [$op]"
         return 1
         ;;
     esac
@@ -1072,30 +1063,30 @@ function fn_main()
     # parse user params
     fn_parse_params "$@"
 
-    # pre-process
-    fn_pre_hardening
-
-    if [ "x${EULEROS_SECURITY}" = "x0" ]
-    then
-        # harden rootfs
-        fn_harden_rootfs
-
-        fn_harden_grub2
-
-        fn_harden_sysctl
-
-        sed -i "s/^EULEROS_SECURITY=.*$/EULEROS_SECURITY=1/g" /etc/euleros_security/security
-    elif [ "x${EULEROS_SECURITY}" = "x1" ]
-    then
-        fn_harden_sysctl
-    else
-        echo "the value of EULEROS_SECURITY is unexpected! please check it."
-    fi
-
-    # harden user conf
-    fn_harden_usr_conf
-    # disable the service in system start
-    systemctl disable euleros-security.service
+#    # pre-process
+#    fn_pre_hardening
+#
+#    if [ "x${EULEROS_SECURITY}" = "x0" ]
+#    then
+#        # harden rootfs
+#        fn_harden_rootfs
+#
+#        fn_harden_grub2
+#
+#        fn_harden_sysctl
+#
+#        sed -i "s/^EULEROS_SECURITY=.*$/EULEROS_SECURITY=1/g" /etc/euleros_security/security
+#    elif [ "x${EULEROS_SECURITY}" = "x1" ]
+#    then
+#        fn_harden_sysctl
+#    else
+#        echo "the value of EULEROS_SECURITY is unexpected! please check it."
+#    fi
+#
+#    # harden user conf
+#    fn_harden_usr_conf
+#    # disable the service in system start
+#    systemctl disable euleros-security.service
 
     # do cleanup and exit
     fn_exit 0
