@@ -361,16 +361,10 @@ function fn_check_rootfs()
     for i in bin usr/bin sbin usr/sbin etc boot lib home root opt var tmp proc sys mnt
     do
         if [ ! -d "$ROOTFS/$i" ]; then
-            if [ $i == "boot" ];then
-                continue
-            fi
-            fn_failed "[$ROOTFS] is not a standard EulerOS rootfs"
+            fn_failed "[$i] does not exist, [$ROOTFS] is not a standard EulerOS rootfs"
             fn_exit 2
         fi
     done
-    if [ ! -d "$ROOTFS"/boot ]; then
-        fn_info "[$ROOTFS] is a EulerOS iSula rootfs"
-    fi
 }
 
 #=============================================================================
