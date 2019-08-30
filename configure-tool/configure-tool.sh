@@ -139,7 +139,7 @@ function fn_log()
 	case $level in
 	FAILED) level=`echo $level | sed -r 's/FAILED/\\\033\\[31;1mFAILED\\\033\\[0m/g'`;;
 	INFO) level=`echo $level | sed -r 's/INFO/\\\033\\[32;1m\ INFO\ \\\033\\[0m/g'`;;
-	WARN)dd level=`echo $level | sed -r 's/WARN/\\\033\\[32;1m\ WARN\ \\\033\\[0m/g'`;;
+	WARN) level=`echo $level | sed -r 's/WARN/\\\033\\[32;1m\ WARN\ \\\033\\[0m/g'`;;
 	esac
 
 	lname=`echo $NAME | sed -r 's/(.*)/\\\033\\[33;1m\\1\\\033\\[0m/g'`
@@ -303,17 +303,6 @@ function fn_parse_params()
         esac
     done
 
-    # Test if dst and conf is valid
-    if [ ! -e "$DST" ]; then
-        echo "distinction [$DST] not existed"
-        exit 1
-    fi
-
-    if [ ! -e "$SCONF" ]; then
-        echo "config_file [$SCONF] not existed"
-        exit 1
-    fi
-
     # first get LOGFILE resolved
     if [ "$LOGFILE" = "" ]; then
         LOGFILE=$WORKD'euleros-security.log'
@@ -322,6 +311,17 @@ function fn_parse_params()
     touch $LOGFILE
     chown root:root $LOGFILE
     chmod 600 $LOGFILE
+
+    # Test if dst and conf is valid
+    if [ ! -e "$DST" ]; then
+        fn_failed "distinction [$DST] not existed"
+        fn_exit 2
+    fi
+
+    if [ ! -e "$SCONF" ]; then
+        fn_failed "config_file [$SCONF] not existed"
+        fn_exit 2
+    fi
 
     readonly DST
     readonly SCONF
@@ -347,75 +347,7 @@ function fn_pre_hardening()
     if [ -d "$DST" ]; then
         ROOTFS=$DST
         fn_info "hardening destination is a rootfs dir [$ROOTFS]"
-        return
     fi
-
-    fn_test_type "$DST" "ar archive"
-    if [ $? -eq 0 ]; then
-        DST_TYPE="ar"
-        AR_F=$DST
-        GZ_F=$WORKD"initrd.cpio.gz"
-        if [ -f "$GZ_F" ]; then
-            rm -f $GZ_F
-            fn_warn "existed $GZ_F removed"
-        fi
-
-        pushd $WORKD
-        ar -x $AR_F $GZ_F
-        if [ $? -ne 0 ] || [ ! -f "$GZ_F" ]; then
-            fn_failed "fail to extract initrd.cpio.gz from [$AR_F]"
-            fn_exit 2
-        fi
-        popd
-    else
-        fn_test_type "$DST" "gzip compressed"
-        if [ $? -eq 0 ]; then
-            GZ_F=$DST
-        else
-            fn_failed "destination format not ar or cpio.gz, quit..."
-            fn_exit 2
-        fi
-    fi
-
-    fn_info "pre_hardening: GZ is [$GZ_F]"
-
-    ROOTFS=$WORKD"initrd.`date +%Y%m%d%H%M%S`"
-    mkdir -p $ROOTFS
-    if [ ! -d "$ROOTFS" ]; then
-        fn_failed "fail to mkdir [$ROOTFS]"
-        fn_exit 2
-    fi
-
-    # fill rootfs dir with filesystem
-    pushd $ROOTFS
-    zcat $GZ_F > "$ROOTFS/$TMPTARGET"
-    if [ $? -ne 0 ]; then
-        fn_failed "fail to extract [$GZ_F] to $ROOTFS/$TMPTARGET"
-        fn_exit 2
-    fi
-
-    fn_test_type "$ROOTFS/$TMPTARGET" "cpio archive"
-    if [ $? -eq 0 ]; then
-        cpio --quiet -id <"$ROOTFS/$TMPTARGET" >/dev/null
-        if [ $? -ne 0 ]; then
-            fn_failed "fail to extract [$GZ_F] to $ROOTFS"
-            fn_exit 2
-        fi
-        if [ "$DST_TYPE" != "ar" ];then
-            DST_TYPE="cpio.gz"
-        fi
-    else
-        tar -xvf "$ROOTFS/$TMPTARGET" >/dev/null
-        if [ $? -ne 0 ]; then
-            fn_failed "fail to extract [$GZ_F] to $ROOTFS"
-            fn_exit 2
-        fi
-        DST_TYPE="tar.gz"
-    fi
-    rm -f "$ROOTFS/$TMPTARGET"
-    popd
-
-    fn_info "pre_hardening done"
 }
 
 #=============================================================================
@@ -885,168 +817,6 @@ function fn_harden_rootfs()
 }
 
 #=============================================================================
-# Function Name: fn_harden_usr_conf
-# Description  : harden the user conf, according to configuration file usr_security.conf
-# Parameter    : none
-# Returns      : none
-#=============================================================================
-function fn_harden_usr_conf()
-{
-    fn_check_rootfs
-
-    fn_info "---begin hardening SUER CONF by [$USR_SCONF]---"
-    local status
-    local f1 f2 f3 f4 f5 f6
-
-    #  do configuration traversal, with comments and lines starting with blankspace ignored
-    grep -v '^#' $USR_SCONF| grep -v '^$'| grep -Ev '^[[:space:]]+'| while read line
-    do
-        f1=`echo $line | awk -F$FIELD_SEP '{print $1}'`
-        if [ $EXECID -ne 0 ] && [ "$EXECID" -ne "$f1" ];then
-            continue
-        fi
-
-        if [[ $line =~ "@@" ]]
-        then
-            #eval $(echo $line | awk '{split($0, filearray, "@");for(i in filearray)print "arr["i"]="filearray[i]}')
-PRE_IFS=$IFS
-IFS='@'
-        arr=($line)
-IFS=$PRE_IFS
-            pos=1
-            for ((i=2;i<${#arr[*]};i++))
-            do
-                if [[ x${arr[$i]} = x ]]
-                then
-                    tem="${arr[$((i-1))]}@${arr[$((i+1))]}"
-                    i=$((i+1))
-                    arr[$pos]=$tem
-                    arr[$i]=$tem
-                else
-                    pos=$((pos+1))
-                    arr[$pos]=${arr[$i]}
-                fi
-            done
-
-            pos=$((pos+1))
-            for ((j=$pos;j<${#arr[*]};j++))
-            do
-                arr[$j]=
-            done
-
-            f2=${arr[1]}
-            f3=${arr[2]}
-            f4=${arr[3]}
-            f5=${arr[4]}
-            f6=${arr[5]}
-        else
-            f2=`echo $line | awk -F$FIELD_SEP '{print $2}'`
-            f3=`echo $line | awk -F$FIELD_SEP '{print $3}'`
-            f4=`echo $line | awk -F$FIELD_SEP '{print $4}'`
-            f5=`echo $line | awk -F$FIELD_SEP '{print $5}'`
-            f6=`echo $line | awk -F$FIELD_SEP '{print $6}'`
-        fi
- 
-        case "$f2" in
-        d|m|sm|M)
-            fn_handle_key "$f2" "$f3" "$f4" "$f5" "$f6"
-            status=$?
-            ;;
-        which)
-            fn_handle_which "$f3"
-            status=$?
-            ;;
-        find)
-            fn_handle_find "$f3" "$f4" "$f5"
-            status=$?
-            ;;
-        cp)
-            fn_handle_cp "$f3" "$f4"
-            status=$?
-            ;;
-        file)
-            fn_handle_file "$f3"
-            status=$?
-            ;;
-        systemctl)
-            fn_handle_systemctl "$f3" "$f4"
-            status=$?
-            ;;
-        path)
-            fn_handle_path "$f3"
-            status=$?
-            ;;
-        home)
-            fn_handle_home "$f3"
-            status=$?
-            ;;
-        umask)
-            fn_handle_umask "$f3" "$f4"
-            status=$?
-            ;;
-        *)
-            fn_handle_command "$f2" "$f3"
-            status=$?
-            ;;
-        esac
-
-        if [ $status -eq 0 ]; then
-            fn_info "-harden [$line]: success"
-        else
-            fn_warn "-harden [$line]: fail"
-        fi
-    done
-    unset line
-    fn_info "---end hardening USER CONF---"
-
-    fn_check_rootfs
-}
-
-#=============================================================================
-# Function Name: fn_harden_nouser_nogroup
-# Description  : Remove nouser and nogroup files
-# Parameter    : none
-# Returns      : 0 on success, otherwise on fail
-#=============================================================================
-function fn_harden_nouser_nogroup()
-{
-    local option=""
-    local command="chown -R root.root"
-    local dir=""
-    local file=""
-    local dirs=`mount | awk '{ if($5!="proc" && $1!="/proc")print $3}'`
-
-    for option in -nouser -nogroup; do
-        for dir in ${dirs}; do
-            for file in `find $dir -xdev $option`; do
-                fn_handle_command "$command" "$file"
-            done
-        done
-    done
-}
-
-#=============================================================================
-# Function Name: fn_harden_grub2
-# Returns      : 0 on success, otherwise on fail
-#=============================================================================
-function fn_harden_grub2()
-{
-    echo -e "cat <<EOF\nset superusers="root"\npassword_pbkdf2 root grub.pbkdf2.sha512.10000.D4D775602C4E9F76EF4A9A6E726486941C8AAFB4762227E6973690ED5A760D59247E7E6ECA72472FBEEBFD9DB60F8EE56A4078094542C790BF0967879BE2D60C.B2742F38995B4B716EA7B0E639D02BE6C4E649E30576E5F5505B85844172B831841DA80D264FD14B025F3C8804158E7FC082998664BD03A92663FB4CE293807B\nEOF\n" >> /etc/grub.d/00_header
-    if [ -d /boot/efi/EFI/euleros -a -d /sys/firmware/efi ]; then
-        grub2-mkconfig -o /boot/efi/EFI/euleros/grub.cfg
-    else
-        grub2-mkconfig -o /boot/grub2/grub.cfg
-    fi
-}
-# Function Name: fn_harden_sysctl
-# Returns      : 0 on success, otherwise on fail
-#=============================================================================
-function fn_harden_sysctl()
-{
-    /sbin/sysctl -p /etc/sysctl.conf
-}
-
-#=============================================================================
 # Function Name: fn_main
 # Description  : main function
 # Parameter    : command line params
@@ -1063,30 +833,11 @@ function fn_main()
     # parse user params
     fn_parse_params "$@"
 
-#    # pre-process
-#    fn_pre_hardening
-#
-#    if [ "x${EULEROS_SECURITY}" = "x0" ]
-#    then
-#        # harden rootfs
-#        fn_harden_rootfs
-#
-#        fn_harden_grub2
-#
-#        fn_harden_sysctl
-#
-#        sed -i "s/^EULEROS_SECURITY=.*$/EULEROS_SECURITY=1/g" /etc/euleros_security/security
-#    elif [ "x${EULEROS_SECURITY}" = "x1" ]
-#    then
-#        fn_harden_sysctl
-#    else
-#        echo "the value of EULEROS_SECURITY is unexpected! please check it."
-#    fi
-#
-#    # harden user conf
-#    fn_harden_usr_conf
-#    # disable the service in system start
-#    systemctl disable euleros-security.service
+    # pre-process
+    fn_pre_hardening
+
+    # harden rootfs
+    fn_harden_rootfs
 
     # do cleanup and exit
     fn_exit 0
@@ -1099,4 +850,3 @@ trap "echo 'canceled by user...'; fn_exit 1" INT TERM
 fn_main "$@"
 
 exit 0
-
