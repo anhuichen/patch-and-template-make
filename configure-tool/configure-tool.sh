@@ -176,72 +176,6 @@ function fn_exit()
 {
     fn_test_params_num 1
     local s=$1
-    # cleanup when destination is cpio.gz
-        if [ "$DST_TYPE" = "tar.gz" ]; then
-                if [ $s -eq 0 ]; then
-                        local new_initrd=$WORKD`basename $GZ_F`".secure"
-                        pushd $ROOTFS
-                        tar -cf "$ROOTFS/$TMPTARGET" *
-                        gzip <"$ROOTFS/$TMPTARGET" > $new_initrd
-                        fn_info "hardened initrd is $new_initrd"
-                        popd
-                fi
-
-                # cleanup rootfs
-                rm -rf $ROOTFS
-        fi
-
-    # cleanup when destination is cpio.gz
-    if [ "$DST_TYPE" = "cpio.gz" ]; then
-        if [ $s -eq 0 ]; then
-            local new_initrd=$WORKD`basename $GZ_F`".secure"
-            pushd $ROOTFS
-            find . |cpio --quiet -co |gzip > $new_initrd
-            fn_info "hardened initrd is $new_initrd"
-            popd
-        fi
-
-        # cleanup rootfs
-        rm -rf $ROOTFS
-    fi
-
-    # cleanup when destination is ar target
-    if [ "$DST_TYPE" = "ar" ]; then
-        if [ $s -eq 0 ]; then
-            local new_ar=$WORKD`basename $AR_F`".secure"
-            cp $AR_F $new_ar
-
-            pushd $ROOTFS
-            find . |cpio --quiet -co|gzip > $GZ_F
-            popd
-            ar -r $new_ar $GZ_F
-            if [ $? -eq 0 ]; then
-                fn_info "initrd.cpio.gz updated"
-            else
-                fn_failed "fail to replace initrd.cpio.gz in $AR_F by $GZ_F"
-                fn_exit 1
-            fi
-
-            # update checksum in new ar target
-            rm -f checksum
-            ar -x $new_ar checksum
-            if [ -f checksum ]; then
-                local sum=`cksum $GZ_F | awk '{print $1}'`
-                sed -i "s/^initrd\.cpio\.gz.*/initrd\.cpio\.gz $sum/" checksum
-                ar -r $new_ar checksum
-                rm checksum
-                fn_info "checksum updated"
-            fi
-
-            fn_info "finish updating, new target is $new_ar"
-        fi
-
-        # cleanup initrd and rootfs
-        fn_info "cleanup GZ [$GZ_F] and ROOTFS [$ROOTFS]"
-        rm -f $GZ_F
-        rm -rf $ROOTFS
-    fi
-
     # log
     fn_info "========exit, status is [$s]========"
     exit $s
@@ -628,8 +562,11 @@ function fn_handle_systemctl()
 
     syetem_service_name=$1
     syetem_service_status=$2
-
-    systemctl ${syetem_service_status} ${syetem_service_name}
+	if [ "$ROOTFS" = "\/" ]; then
+    	systemctl ${syetem_service_status} ${syetem_service_name}
+	else
+		systemctl ${syetem_service_status} ${syetem_service_name} --root=$ROOTFS
+	fi
 
     return $?
 }
