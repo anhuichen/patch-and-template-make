@@ -138,28 +138,28 @@ function fn_log()
 	# highlight in different color for level
 	case $level in
 	FAILED) level=`echo $level | sed -r 's/FAILED/\\\033\\[31;1mFAILED\\\033\\[0m/g'`;;
-	INFO) level=`echo $level | sed -r 's/INFO/\\\033\\[32;1m\ INFO\ \\\033\\[0m/g'`;;
-	WARN) level=`echo $level | sed -r 's/WARN/\\\033\\[32;1m\ WARN\ \\\033\\[0m/g'`;;
+	INFO) level=`echo $level | sed -r 's/INFO/\\\033\\[35;1m\ INFO\ \\\033\\[0m/g'`;;
+	WARN) level=`echo $level | sed -r 's/WARN/\\\033\\[33;1m\ WARN\ \\\033\\[0m/g'`;;
 	esac
 
-	lname=`echo $NAME | sed -r 's/(.*)/\\\033\\[33;1m\\1\\\033\\[0m/g'`
-	lno=`echo $lno | sed -r 's/(.*)/\\\033\\[35;1m\\1\\\033\\[0m/g'`
+	lname=`echo $NAME | sed -r 's/(.*)/\\\033\\[33;0m\\1\\\033\\[0m/g'`
+	lno=`echo $lno | sed -r 's/(.*)/\\\033\\[35;0m\\1\\\033\\[0m/g'`
 
 	# highlight in different color for level
     output=$@
-    opt=`echo $output | grep -e "success$"`
+    opt=`echo $output | grep -e "^success"`
     if [ $? -eq 0 ];then
-        output=`echo $opt | sed -r 's/success$/\\\033\\[32;1msuccess\\\033\\[0m/g'`
+        output=`echo $opt | sed -r 's/^success/\\\033\\[32;1msuccess\\\033\\[0m/g'`
     fi
-    opt=`echo $output | grep -e "fail$"`
+    opt=`echo $output | grep -e "^fail"`
     if [ $? -eq 0 ];then
-        output=`echo $opt | sed -r 's/fail$/\\\033\\[31;1mfail\\\033\\[0m/g'`
+        output=`echo $opt | sed -r 's/^fail/\\\033\\[31;1mfail\ \ \ \\\033\\[0m/g'`
     fi
 
     if [ $SILENT -eq 0 ] || [ "$level" = "ERROR" ]; then
-    	echo -e "`date '+%F %H:%M:%S'` [$level] [$lname:$lno] $output"
+    	echo -e "`date '+%F %H:%M:%S'` [$level] $output"
     fi
-    echo -e "`date '+%F %H:%M:%S'` [$level] [$lname:$lno] $output" >> $LOGFILE
+    echo -e "`date '+%F %H:%M:%S'` [$level] $output" >> $LOGFILE
 
 }
 alias fn_failed='fn_log $LINENO FAILED'
@@ -736,9 +736,9 @@ function fn_harden_rootfs()
         esac
 
         if [ $status -eq 0 ]; then
-            fn_info "-harden [$line]: success"
+            fn_info "success [$line]"
         else
-            fn_warn "-harden [$line]: fail"
+            fn_warn "fail [$line]"
         fi
     done
     unset line
