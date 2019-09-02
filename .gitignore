@@ -1,4 +1,4 @@
 log-20*
-rootfs
+rootfs*
 test.sh
 euleros-security.log
