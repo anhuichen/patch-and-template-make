@@ -562,7 +562,7 @@ function fn_handle_systemctl()
 
     syetem_service_name=$1
     syetem_service_status=$2
-	if [ "$ROOTFS" = "\/" ]; then
+	if [ "$ROOTFS" = "/" ]; then
     	systemctl ${syetem_service_status} ${syetem_service_name}
 	else
 		systemctl ${syetem_service_status} ${syetem_service_name} --root=$ROOTFS
