@@ -445,6 +445,37 @@ function fn_handle_which()
 }
 
 #=============================================================================
+# Function Name: fn_handle_bashcmd
+# Description  : deal with configurations referred to operations to files
+# Parameter    : command[option], files
+# Returns      : 0 on success, otherwise on fail
+#=============================================================================
+function fn_handle_bashcmd()
+{
+    fn_test_params_num 2
+
+    local op=$1
+    local files=$2
+    local status=0
+
+    # add ROOTFS path for every file
+    for file in `echo "$files" | awk -v rf="$ROOTFS" '{
+        for(i=1; i<=NF; i++) {
+                       printf "%s%s\n",rf,$i
+        }
+    }'`; do
+		echo "${op} ${file}"
+        /bin/bash -c "${op} ${file}"
+        if [ $? -ne 0 ]; then
+            status=1
+        fi
+    done
+    unset f
+
+    return $status
+}
+
+#=============================================================================
 # Function Name: fn_handle_command
 # Description  : deal with configurations referred to operations to files
 # Parameter    : command[option], files
@@ -729,6 +760,10 @@ function fn_harden_rootfs()
             fn_handle_umask "$f3" "$f4"
             status=$?
             ;;
+		bashcmd)
+			fn_handle_bashcmd "$f3" "$f4"
+			status=$?
+			;;
         *)
             fn_handle_command "$f2" "$f3"
             status=$?
