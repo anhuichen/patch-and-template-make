@@ -1,0 +1,2 @@
+127.0.0.1 {{fqdn}} {{hostname}}
+::1 {{fqdn}} {{hostname}}
