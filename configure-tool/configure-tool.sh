@@ -459,17 +459,23 @@ function fn_handle_bashcmd()
     local status=0
 
     # add ROOTFS path for every file
+	if [ -z "$files" ]; then
+		/bin/bash -c "${op}"
+		if [ $? -ne 0 ]; then
+            status=1
+        fi
+	else
     for file in `echo "$files" | awk -v rf="$ROOTFS" '{
         for(i=1; i<=NF; i++) {
                        printf "%s%s\n",rf,$i
         }
     }'`; do
-		echo "${op} ${file}"
         /bin/bash -c "${op} ${file}"
         if [ $? -ne 0 ]; then
             status=1
         fi
     done
+	fi
     unset f
 
     return $status
